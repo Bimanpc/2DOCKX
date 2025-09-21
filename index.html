@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>PDF → DOCX Converter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #121833;
+      --text: #e7eaf3;
+      --muted: #98a2b3;
+      --accent: #6ea8fe;
+      --accent-2: #7cf5ff;
+      --danger: #ff6b6b;
+      --ok: #2ecc71;
+      --border: #243055;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 80% -10%, #1e2760 0%, transparent 70%), var(--bg);
+      color: var(--text);
+    }
+    .wrap { max-width: 880px; margin: 4rem auto; padding: 0 1rem; }
+    .title { font-size: 2rem; font-weight: 700; letter-spacing: 0.2px; }
+    .subtitle { color: var(--muted); margin-top: 0.25rem; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.00));
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(255,255,255,0.02);
+      backdrop-filter: blur(6px);
+    }
+    .grid { display: grid; grid-template-columns: 1fr 320px; gap: 20px; }
+    @media (max-width: 920px) { .grid { grid-template-columns: 1fr; } }
+
+    .drop {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+      background: rgba(255,255,255,0.02);
+    }
+    .drop.dragover {
+      border-color: var(--accent);
+      background: rgba(110,168,254,0.08);
+    }
+    .drop strong { color: var(--accent-2); }
+    .hint { color: var(--muted); font-size: 0.9rem; margin-top: 8px; }
+    .hidden-input { display: none; }
+
+    .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+    .btn {
+      background: linear-gradient(180deg, #2a67ff, #1a49c9);
+      color: white; border: none; border-radius: 10px; padding: 12px 16px;
+      font-weight: 600; cursor: pointer; transition: transform 0.05s ease, opacity 0.2s;
+    }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn.secondary {
+      background: transparent; color: var(--text); border: 1px solid var(--border);
+    }
+    .tag {
+      font-size: 0.85rem; color: var(--muted); padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px;
+    }
+    .switch {
+      display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+    }
+    .switch input { display: none; }
+    .toggle {
+      width: 40px; height: 24px; background: #263355; border-radius: 999px; position: relative; transition: background 0.2s;
+      border: 1px solid var(--border);
+    }
+    .toggle::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: white; border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .switch input:checked + .toggle { background: #2a67ff; }
+    .switch input:checked + .toggle::after { transform: translateX(16px); }
+
+    select, .text {
+      background: rgba(255,255,255,0.02); border: 1px solid var(--border); color: var(--text);
+      border-radius: 10px; padding: 10px 12px; outline: none;
+    }
+    .status { margin-top: 14px; min-height: 24px; color: var(--muted); }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--danger); }
+    .file-chip {
+      display: inline-flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      background: rgba(255,255,255,0.03); margin-top: 12px;
+    }
+    .progress {
+      height: 10px; background: rgba(255,255,255,0.05); border-radius: 999px; overflow: hidden; border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+    .bar {
+      height: 100%; width: 0%; background: linear-gradient(90deg, #6ea8fe, #7cf5ff);
+      transition: width 0.2s ease;
+    }
+    .footer { margin-top: 28px; color: var(--muted); font-size: 0.85rem; }
+    a { color: var(--accent-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">PDF → DOCX Converter</div>
+    <div class="subtitle">Fast, accurate conversion with optional OCR. Your file stays private on your server.</div>
+
+    <div class="card" style="margin-top: 20px;">
+      <div class="grid">
+        <div>
+          <div id="dropzone" class="drop" tabindex="0" role="button" aria-label="Upload PDF">
+            <div style="font-size: 1.05rem;">
+              <strong>Drop your PDF here</strong> or
+              <a href="#" id="pickLink">browse</a>
+            </div>
+            <div class="hint">PDF only, up to 50 MB. One file at a time.</div>
+            <input id="fileInput" class="hidden-input" type="file" accept="application/pdf,.pdf" />
+          </div>
+
+          <div id="fileChip" class="file-chip" style="display:none;">
+            <span id="fileName">document.pdf</span>
+            <span class="tag" id="fileSize">0 MB</span>
+            <button id="clearBtn" class="btn secondary" style="padding:6px 10px;">Remove</button>
+          </div>
+
+          <div class="row">
+            <button id="convertBtn" class="btn" disabled>Convert to DOCX</button>
+            <a id="downloadLink" class="btn secondary" style="display:none;" href="#" download>Download DOCX</a>
+            <span class="tag" id="hintTag">Ready when a file is selected</span>
+          </div>
+
+          <div class="progress"><div id="bar" class="bar"></div></div>
+          <div id="status" class="status">Idle</div>
+        </div>
+
+        <div>
+          <div style="font-weight:600; margin-bottom:10px;">Settings</div>
+          <div class="row">
+            <label class="switch">
+              <input type="checkbox" id="ocr" />
+              <span class="toggle"></span>
+              <span>Enable OCR for scanned PDFs</span>
+            </label>
+          </div>
+          <div class="row">
+            <label for="lang" style="min-width:110px;">OCR language</label>
+            <select id="lang">
+              <option value="auto">Auto detect</option>
+              <option value="en">English</option>
+              <option value="el">Greek</option>
+              <option value="es">Spanish</option>
+              <option value="fr">French</option>
+              <option value="de">German</option>
+              <option value="it">Italian</option>
+              <option value="pt">Portuguese</option>
+              <option value="ru">Russian</option>
+              <option value="zh">Chinese</option>
+              <option value="ja">Japanese</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="layout" style="min-width:110px;">Layout</label>
+            <select id="layout">
+              <option value="preserve">Preserve formatting</option>
+              <option value="flows">Reflow for editing</option>
+            </select>
+          </div>
+          <div class="footer">
+            Tip: For best results on scanned documents, enable OCR and set the correct language.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      By using this app, you agree to process files on your own infrastructure. No files are sent to third parties.
+    </div>
+  </div>
+
+  <script>
+    const MAX_MB = 50;
+    const fileInput = document.getElementById('fileInput');
+    const dropzone = document.getElementById('dropzone');
+    const pickLink = document.getElementById('pickLink');
+    const convertBtn = document.getElementById('convertBtn');
+    const statusEl = document.getElementById('status');
+    const bar = document.getElementById('bar');
+    const fileChip = document.getElementById('fileChip');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const clearBtn = document.getElementById('clearBtn');
+    const downloadLink = document.getElementById('downloadLink');
+    const hintTag = document.getElementById('hintTag');
+    const ocrEl = document.getElementById('ocr');
+    const langEl = document.getElementById('lang');
+    const layoutEl = document.getElementById('layout');
+
+    let currentFile = null;
+    let lastDownloadUrl = null;
+
+    function fmtBytes(bytes) {
+      const mb = bytes / (1024*1024);
+      return (mb >= 1 ? mb.toFixed(2) + ' MB' : (bytes/1024).toFixed(0) + ' KB');
+    }
+
+    function resetUI(hard=false) {
+      statusEl.textContent = 'Idle';
+      statusEl.className = 'status';
+      bar.style.width = '0%';
+      downloadLink.style.display = 'none';
+      if (lastDownloadUrl) {
+        URL.revokeObjectURL(lastDownloadUrl);
+        lastDownloadUrl = null;
+      }
+      if (hard) {
+        currentFile = null;
+        convertBtn.disabled = true;
+        fileChip.style.display = 'none';
+        hintTag.textContent = 'Ready when a file is selected';
+      }
+    }
+
+    function setFile(file) {
+      currentFile = file;
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = fmtBytes(file.size);
+      fileChip.style.display = 'inline-flex';
+      convertBtn.disabled = false;
+      hintTag.textContent = 'Press Convert to start';
+      resetUI();
+    }
+
+    function validate(file) {
+      if (!file) return 'No file selected.';
+      const ext = file.name.toLowerCase().split('.').pop();
+      if (ext !== 'pdf' || file.type !== 'application/pdf') {
+        return 'Please select a valid PDF file.';
+      }
+      const sizeMB = file.size / (1024*1024);
+      if (sizeMB > MAX_MB) {
+        return `File exceeds ${MAX_MB} MB limit.`;
+      }
+      return null;
+    }
+
+    pickLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      const err = validate(file);
+      if (err) {
+        statusEl.textContent = err;
+        statusEl.className = 'status err';
+        return;
+      }
+      setFile(file);
+    });
+
+    ;['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('dragover');
+    }));
+    ;['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('dragover');
+    }));
+    dropzone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      const err = validate(file);
+      if (err) {
+        statusEl.textContent = err;
+        statusEl.className = 'status err';
+        return;
+      }
+      setFile(file);
+    });
+
+    clearBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      resetUI(true);
+    });
+
+    function updateProgress(percent) {
+      bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+    }
+
+    async function convert() {
+      if (!currentFile) return;
+      convertBtn.disabled = true;
+      statusEl.textContent = 'Uploading...';
+      statusEl.className = 'status';
+      updateProgress(10);
+
+      try {
+        const form = new FormData();
+        form.append('file', currentFile);
+        form.append('ocr', ocrEl.checked ? '1' : '0');
+        form.append('lang', langEl.value);
+        form.append('layout', layoutEl.value);
+
+        // Use fetch; servers should stream or chunk for large files.
+        const res = await fetch('/api/convert', {
+          method: 'POST',
+          body: form
+        });
+
+        if (!res.ok) {
+          const msg = await safeReadText(res);
+          throw new Error(msg || `Server error: ${res.status}`);
+        }
+
+        statusEl.textContent = 'Converting...';
+        updateProgress(60);
+
+        const blob = await res.blob();
+        updateProgress(90);
+
+        // Determine filename
+        let fname = suggestOutputName(currentFile.name);
+        const disp = res.headers.get('Content-Disposition');
+        const parsed = parseContentDisposition(disp);
+        if (parsed && parsed.filename) fname = parsed.filename;
+
+        const url = URL.createObjectURL(blob);
+        lastDownloadUrl = url;
+        downloadLink.href = url;
+        downloadLink.download = fname;
+        downloadLink.style.display = 'inline-block';
+
+        statusEl.textContent = 'Done';
+        statusEl.className = 'status ok';
+        updateProgress(100);
+      } catch (err) {
+        statusEl.textContent = err.message || 'Conversion failed.';
+        statusEl.className = 'status err';
+        updateProgress(0);
+      } finally {
+        convertBtn.disabled = !currentFile;
+      }
+    }
+
+    convertBtn.addEventListener('click', convert);
+
+    function suggestOutputName(name) {
+      const base = name.replace(/\.pdf$/i, '');
+      return base + '.docx';
+    }
+
+    function parseContentDisposition(header) {
+      if (!header) return null;
+      // Simple parse; supports filename="..." and filename*=UTF-8''...
+      const out = {};
+      const fnStar = header.match(/filename\*\s*=\s*([^']*)''([^;]+)/i);
+      if (fnStar) {
+        try {
+          out.filename = decodeURIComponent(fnStar[2]);
+          return out;
+        } catch {}
+      }
+      const fn = header.match(/filename\s*=\s*"?([^";]+)"?/i);
+      if (fn) out.filename = fn[1];
+      return out;
+    }
+
+    async function safeReadText(res) {
+      try { return await res.text(); } catch { return ''; }
+    }
+  </script>
+</body>
+</html>
